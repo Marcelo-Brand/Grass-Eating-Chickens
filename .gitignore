@@ -1,0 +1,19 @@
+# Pastas do Visual Studio
+.vs/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+
+# Arquivos de compilação
+*.exe
+*.obj
+*.pdb
+*.ilk
+*.log
+*.tlog
+*.lastbuildstate
+
+# Arquivos de usuário
+*.user
+*.suo
