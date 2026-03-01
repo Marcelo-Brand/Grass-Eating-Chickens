@@ -4,34 +4,46 @@
 #include <algorithm>
 #include <chrono>
 #include <thread>
+#include <windows.h>
 
 #define NO_PARENT 0
 
 using namespace std;
+using std::cout;
+using std::cin;
 
 class Life;
+struct Gene;
 
 int id_creator();
 int random_int(int init, int end);
 void generate_grass();
 void print_grid();
-
 void move_cursor(int x, int y);
+void update_dashboard();
+void generate_animals(int num);
+bool check_lim(int x, int y);
+void hide_cursor();
 
-const int Grid_x = 20;
+const int Grid_x = 30;
 const int Grid_y = 80;
 
 int grid[Grid_x][Grid_y];
+vector<Life> pop;
 
-pair<int, int> head_rot[4] = { {1, 0}, {0, 1}, {-1, 0},{0, -1} };
+// image config
 char head_img[4] = {'v', '>', '^', '<'};
 int grass_id = 1;
 char white_space = ' ';
+char body_char = '#';
 vector <int> ids;
 
+// inernal and external coonfig
 int min_Gene = 1;
 int max_Gene = 5;
-vector<Life> pop;
+pair<int, int> head_rot[4] = { {1, 0}, {0, 1}, {-1, 0},{0, -1} };
+int grass_energy = 100;
+int grass_spaw_prob = 20;
 
 struct Gene {
 	int speed;
@@ -43,38 +55,58 @@ struct Gene {
 
 class Life {
 public:
+  
+	int x = 0, y = 0, head_x = 0, head_y = 0, orientation = 0, energy = 0, metabolism = 0;
+    
 
-	int x, y, head_x, head_y, orientation;
-	int metabolism, energy;
-	bool alive;
+    Gene animal_gene = {
+        1,
+        1,
+        1,
+        1
+    };
 
-	Gene animal_gene = {
-		1,
-		1,
-		1,
-		1
-	};
+    Life(int start_x, int start_y, Gene parent_gene) {
 
-	void kill() {
-		move_cursor(x, y);
-		cout << white_space;
-		grid[x][y] = 0;
 
-		move_cursor(head_x, head_y);
-		cout << white_space;
-		grid[head_x][head_y] = 0;
+		//  verify superposition of body
+		int rand = random_int(1, 4);
+		if (parent_gene.speed == NO_PARENT) {
+			
+			for (int i = 0; i < 4; i++) {
+
+				int new_x = start_x + head_rot[(i + rand) % 4].first;
+				int new_y = start_y + head_rot[(i + rand) % 4].second;
+
+				// verify grid violation
+				if (new_x >= 0 && new_x < Grid_x && new_y >= 0 && new_y < Grid_y) {
+
+					if (grid[new_x][new_y] == 0) {
+						start_x = new_x;
+						start_y = new_y;
+						break;
+					}
+					else if (grid[new_x][new_y] == grass_id) {
+
+						energy += grass_energy;
+						start_x = new_x;
+						start_y = new_y;
+						break;
+					}
+
+				}
+
+				if (i == 3) {
+					return;
+				}
+			}
+
 		
-		x = 0;
-		y = 0;
-		head_x = 0;
-		head_y = 0;
-		alive = false;
-	}
+		}
+		
 
-	Life(int start_x, int start_y, Gene parent_gene) {
 
 		// if has no parent
-		
 		if (parent_gene.speed == NO_PARENT) {
 			animal_gene = {
 				random_int(min_Gene, max_Gene),
@@ -101,12 +133,45 @@ public:
 			if (animal_gene.smell > max_Gene) {
 				animal_gene.smell--;
 			}
+
+			int random = random_int(0, 3); /*
+			int new_x = start_x + [random];
+			int new_y = start_y +;*/
+
+			for (int i = 0; i < 4; i++) {
+			
+				int new_x = start_x + head_rot[(i + random) % 4].first;
+				int new_y = start_y + head_rot[(i + random) % 4].second;
+				
+				if (new_x < 0 || new_x >= Grid_x || new_y < 0 || new_y >= Grid_y) {
+					continue;
+				}
+				
+				if (grid[new_x][new_y] == 0) {
+					
+					start_x = new_x;
+					start_y = new_y;
+					break;
+				}
+				else if (grid[new_x][new_y] == grass_id) {
+					
+					start_x = new_x;
+					start_y = new_y;
+					energy += grass_energy;
+					
+					break;
+				}
+
+				if (i == 4) {
+					return;
+				}
+			}
 		}
 
 		x = start_x;
 		y = start_y;
 
-		grid[start_x][start_y] = parent_gene.id;
+		grid[x][y] = animal_gene.id;
 
 		// creation of the head of the animal with the head with negative of his id
 		for (int i = 0; i < 4; i++) {
@@ -120,28 +185,64 @@ public:
 				if (grid[pos.first][pos.second] == 0) {
 
 					grid[pos.first][pos.second] = -1 * parent_gene.id;
+					
 					head_x = pos.first;
 					head_y = pos.second;
 					orientation = (i + random_index) % 4;
+					
+					break;
+				}
+				// if spaw head in grass eat grass
+				else if (grid[pos.first][pos.second] == grass_id) {
+					
+					energy += grass_energy;
+					grid[pos.first][pos.second] = -1 * parent_gene.id;
+					
+					head_x = pos.first;
+					head_y = pos.second;
+					orientation = (i + random_index) % 4;
+					
 					break;
 				}
 			}
-			if (i == 4) grid[start_x][start_y] = 0;
+			if (i == 3) grid[x][y] = 0;
+			return;
 		}
 
-		energy = 100;
-		metabolism = animal_gene.speed * 1 + animal_gene.smell * 0 + animal_gene.vision * 0;
-
+		energy += 150;
+		metabolism = animal_gene.speed * 1 + animal_gene.smell * 0 + animal_gene.vision * 0 + 5;
+		
+		pop.push_back(*this);
+		
 		move_cursor(x, y);
-		cout << '#';
+		cout << body_char;
+
 		move_cursor(head_x, head_y);
 		cout << head_img[orientation];
+		
 
-		alive = true;
 		cout << flush;
 	}
 
-	int see_food() {
+	void kill() {
+
+
+		for (int i = 0; i < pop.size(); i++) {
+			if (pop[i].animal_gene.id == animal_gene.id) {
+				pop.erase(pop.begin() + i);
+			}
+		}
+		move_cursor(x, y);
+		cout << white_space;
+		grid[x][y] = 0;
+
+		move_cursor(head_x, head_y);
+		cout << white_space;
+		grid[head_x][head_y] = 0;
+
+	}
+
+	int see_food() const {
 
 		int vision = animal_gene.vision;
 		
@@ -161,57 +262,123 @@ public:
 		return 0;
 	}
 
-	int smell_food() {
+	int smell_food() const {
+		
+		
+		/*for (int i = 0; i < animal_gene.smell; i++) {
+			for (int j = 0; j < animal_gene.smell; j++) {
+
+				if 
+			}
+		}*/
 		return 0;
 	}
 
-	void rot_mov(bool first, bool past_value) {
+	void rot_mov() {
 		
-		bool mov;
-		if (first) mov = random_int(0, 1);
-		else mov = !past_value;
-		
-		int new_orientation;
+		bool rand = random_int(0, 1);
 
-		if (mov) {
-			new_orientation = (orientation + 1) % 4;
+		int first_ori, second_ori;
+
+		if (rand) {
+			first_ori = (orientation + 1) % 4;
+			second_ori = (orientation + 3) % 4;
 		}
 		else {
-			new_orientation = (orientation + 3) % 4;
+			first_ori = (orientation + 3) % 4;
+			second_ori = (orientation + 1) % 4;
 		}
 
+		int nx = x + head_rot[first_ori].first;
+		int ny = y + head_rot[first_ori].second;
 
-		int new_x = x + head_rot[new_orientation].first;
-		int new_y = y + head_rot[new_orientation].second;
+		if (check_lim(nx, ny)) {
 
-		// check limits
-		if (new_x < 0 || new_x >= Grid_x || new_y < 0 || new_y >= Grid_y) {
-			rot_mov(false, mov);
-			return;
+			if (grid[nx][ny] == 0) {
+				
+				grid[head_x][head_y] = 0;
+				grid[nx][ny] = (-1 * animal_gene.id);
+				
+				move_cursor(head_x, head_y);
+				cout << white_space;
+
+				head_x = nx;
+				head_y = ny;
+				
+				orientation = first_ori;
+				
+				move_cursor(head_x, head_y);
+				cout << head_img[orientation];
+
+				return;
+			}
+			else if (grid[nx][ny] == grass_id) {
+
+				energy += grass_energy;
+
+				grid[head_x][head_y] = 0;
+				grid[nx][ny] = (-1 * animal_gene.id);
+
+				move_cursor(head_x, head_y);
+				cout << white_space;
+
+				head_x = nx;
+				head_y = ny;
+
+				orientation = first_ori;
+
+				move_cursor(head_x, head_y);
+				cout << head_img[orientation];
+
+				return;
+			}
 		}
-		// check other animals
-		if (grid[new_x][new_y] == 0) {
 
+		// if the fisrt opitions is locked
+		nx = x + head_rot[second_ori].first;
+		ny = y + head_rot[second_ori].second;
+		
+		if (check_lim(nx, ny)) {
+
+			if (grid[nx][ny] == 0) {
+
+				grid[head_x][head_y] = 0;
+				grid[nx][ny] = (-1 * animal_gene.id);
+
+				move_cursor(head_x, head_y);
+				cout << white_space;
+
+				head_x = nx;
+				head_y = ny;
+
+				orientation = second_ori;
+
+				move_cursor(head_x, head_y);
+				cout << head_img[orientation];
+
+				return;
+			}
+			else if (grid[nx][ny] == grass_id) {
+
+				energy += grass_energy;
+
+				grid[head_x][head_y] = 0;
+				grid[nx][ny] = (-1 * animal_gene.id);
+
+				move_cursor(head_x, head_y);
+				cout << white_space;
+
+				head_x = nx;
+				head_y = ny;
+
+				orientation = second_ori;
+
+				move_cursor(head_x, head_y);
+				cout << head_img[orientation];
+				
+				return;
+			}
 		}
-		else if (grid[new_x][new_y] == grass_id) {
-			energy += 100;
-		}
-		else {
-			rot_mov(false, mov);
-			return;
-		}
-
-		grid[head_x][head_y] = 0;
-		move_cursor(head_x, head_y);
-		cout << white_space;
-
-		grid[new_x][new_y] = -1 * animal_gene.id;
-		move_cursor(new_x, new_y);
-		cout << head_img[new_orientation];
-
-		orientation = new_orientation;
-		head_x = new_x;
-		head_y = new_y;
 	}
 
 	void linear_mov() {
@@ -220,8 +387,8 @@ public:
 		int new_y = head_y + head_rot[orientation].second;
 
 		// check limits
-		if (new_x < 0 || new_x >= Grid_x || new_y < 0 || new_y >= Grid_y) {
-			rot_mov(true, 0);
+		if (!check_lim(new_x, new_y)) {
+			rot_mov();
 			return;
 		}
 
@@ -249,7 +416,7 @@ public:
 		int mov_type = random_int(1, 10);
 
 		if (mov_type <= 2) {
-			rot_mov(true, 0);
+			rot_mov();
 		}
 		else {
 			linear_mov();
@@ -263,6 +430,7 @@ public:
 		// if the num of moviments is greater than the actual moviments
 		if (num_moviment > animal_gene.speed) return 1;
 
+		energy -= metabolism;
 
 		int front_x = head_x + head_rot[orientation].first;
 		int front_y = head_y + head_rot[orientation].second;
@@ -270,20 +438,26 @@ public:
 		// eat grass
 		if (front_x >= 0 && front_x < Grid_x && front_y >= 0 && front_y < Grid_y){
 
+			// eat grass
 			if(grid[front_x][front_y] == grass_id) {
 					
 				grid[front_x][front_y] = 0;
 				energy += 100;
 
 				if (energy >= 200) {
-					pair<int,int> pos_animal = head_rot[random_int(1, 4)] ;
-					
-					Life new_animal(x + pos_animal.first, y + pos_animal.second, animal_gene);
-					pop.push_back(new_animal);
+
+					Life new_animal(x, y, animal_gene);
 					energy -= 100;
 					
 					return 1;
 				}
+			}
+
+			// avoid animal overlap
+			else if (grid[front_x][front_y] != 0) {
+				rot_mov();
+				
+				return 1;
 			}
 		}
 
@@ -299,7 +473,7 @@ public:
 			random_mov();
 		}
 		
-		energy -= metabolism;
+		
 		if (energy <= 0) {
 			kill();
 			return 0;
@@ -307,53 +481,42 @@ public:
 		return 1;
 		cout << flush;
 	}
-	
 };
 
-void update_dashboard(vector<Life>& animal);
 
 
 int main() {
 
 	ios_base::sync_with_stdio(0);
 
+	int num_animals;
+	cout << "How many animals: ";
+	cin >> num_animals;
+	system("cls");
+		
+	hide_cursor();
+
 	print_grid();
 	generate_grass();
-	
+	generate_animals(num_animals);
 
-	Gene no_parent = {
-		NO_PARENT,
-		NO_PARENT,
-		NO_PARENT,
-		NO_PARENT
-	};
-
-
-	Life animal_1(10, 10, no_parent);
-	Life animal_2(10, 30, no_parent);
-	Life animal_3(15, 50, no_parent);
-	Life animal_4(8, 2, no_parent);
 	
-	pop.push_back(animal_1);
-	pop.push_back(animal_2);
-	pop.push_back(animal_3);
-	pop.push_back(animal_4);
-	
-	update_dashboard(pop);
+	// update_dashboard();
 	cin.get();
 
 	while (true) {
 		
 		for (int j = 1; j <= max_Gene; j++) {
 			for (int i = 0; i < pop.size(); i++) {
-
 				
 				if (pop[i].moviment_control(j) == 0) {
-					pop.erase(pop.begin() + i);
+					i--;
 				}
-				update_dashboard(pop);
+				update_dashboard();
 				move_cursor(Grid_x + 2, 0);
-
+				
+				// wait for the next step
+				// this_thread::sleep_for(chrono::milliseconds(30));
 			}
 		}
 		cin.get();
@@ -373,9 +536,9 @@ void generate_grass() {
 	for (int i = 0; i < Grid_x; i++) {
 		for (int j = 0; j < Grid_y; j++) {
 
-			int value = random_int(1, 30);
+			int value = random_int(1, 20);
 
-			if (value == 10 && grid[i][j] == 0) {
+			if (value == 1 && grid[i][j] == 0) {
 				grid[i][j] = grass_id;
 				move_cursor(i, j);
 				cout << 'W';
@@ -398,52 +561,87 @@ void print_grid() {
 
 			if (grid[i][j] == 0) {
 				cout << white_space;
-				continue;
 			}
-
-			if (grid[i][j] == 1) cout << 'W';
-
-			else if (grid[i][j] < 0) {
-				continue;
-				//cout << head_img[pop[(abs(grid[i][j]))].orientation];
-			}
-			else cout << grid[i][j];
+			// print grass
+			else if (grid[i][j] == 1) cout << 'W';
 		}
 		cout << "\n";
 	}
 }
 
-void update_dashboard(vector<Life>& animal) {
+void update_dashboard() {
 	
-	for (int i = 0; i < animal.size(); i++) {
+	for (int i = 0; i < pop.size(); i++) {
 		
 		move_cursor(i * 7 + 1, Grid_y + 5);
-		cout << "--- Status Animal " << animal[i].animal_gene.id << " ---";
+		cout << "--- Status Animal " << pop[i].animal_gene.id << " ---";
 		
 		move_cursor(i * 7 + 2, Grid_y + 5);
-		cout << "Speed: " << animal[i].animal_gene.speed;
+		cout << "Speed: " << pop[i].animal_gene.speed;
 		
 		move_cursor(i * 7 + 3, Grid_y + 5);
-		cout << "Vision: " << animal[i].animal_gene.vision;
+		cout << "Vision: " << pop[i].animal_gene.vision;
 
 		move_cursor(i * 7 + 4, Grid_y + 5);
-		cout << "Smell: " << animal[i].animal_gene.smell;
+		cout << "Smell: " << pop[i].animal_gene.smell;
 
 
 		// energy
 		move_cursor(i * 7 + 5, Grid_y + 5);
 		cout << "                     ";
 		move_cursor(i * 7 + 5, Grid_y + 5);
-		cout << "Energy: " << animal[i].energy;
+		cout << "Energy: " << pop[i].energy;
 
 		// pos x and y
 		move_cursor(i * 7 + 6, Grid_y + 5);
 		cout << "                     ";
 		move_cursor(i * 7 + 6, Grid_y + 5);
-		cout << "x: " << animal[i].x << " " << "y: " << animal[i].y;
+		cout << "x: " << pop[i].x << " " << "y: " << pop[i].y;
 	}
+	
+	move_cursor(pop.size() * 7 + 6, Grid_y + 5);
+	cout << "                     " << "\n";
+	cout << "                     ";
+	
 }
 
 void move_cursor(int x, int y) {
 	cout << "\33[" << (x + 1) << ";" << (y + 1) << "H";
+}
+
+void generate_animals(int num) {
+
+	Gene no_parent = {NO_PARENT, NO_PARENT, NO_PARENT, NO_PARENT};
+
+	for (int i = 0; i < num; i++) {
+		int new_x = random_int(0, Grid_x);
+		int new_y = random_int(0, Grid_y);
+
+		Life temp(new_x, new_y, no_parent);
+
+	}
+}
+
+bool check_lim(int x, int y) {
+
+	if (x >= 0 && x < Grid_x && y >= 0 && y < Grid_y) {
+		return 1;
+	}
+	else {
+		return 0;
+	}
+}
+
+void hide_cursor() {
+	HANDLE consoleHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+	CONSOLE_CURSOR_INFO info;
+
+	// Pega as configurações atuais (para não quebrar nada)
+	GetConsoleCursorInfo(consoleHandle, &info);
+
+	// O pulo do gato: Define a visibilidade como FALSA
+	info.bVisible = FALSE;
+
+	// Aplica a nova configuração
+	SetConsoleCursorInfo(consoleHandle, &info);
 }
