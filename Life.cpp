@@ -5,6 +5,7 @@
 #include <chrono>
 #include <thread>
 #include <windows.h>
+#include <string>
 
 #define NO_PARENT 0
 
@@ -30,6 +31,7 @@ const int Grid_y = 80;
 
 int grid[Grid_x][Grid_y];
 vector<Life> pop;
+pair<int, int> head_rot[4] = { {1, 0}, {0, 1}, {-1, 0},{0, -1} };
 
 // image config
 char head_img[4] = {'v', '>', '^', '<'};
@@ -41,9 +43,15 @@ vector <int> ids;
 // inernal and external coonfig
 int min_Gene = 1;
 int max_Gene = 5;
-pair<int, int> head_rot[4] = { {1, 0}, {0, 1}, {-1, 0},{0, -1} };
 int grass_energy = 100;
 int grass_spaw_prob = 20;
+
+// metabolism calculation
+int Vision_weight = 0;
+int Speed_weight = 0;
+int Smell_weight = 0;
+int	Coeficient_of_existence = 0;
+
 
 struct Gene {
 	int speed;
@@ -127,9 +135,13 @@ public:
 			if (animal_gene.speed > max_Gene) {
 				animal_gene.speed--;
 			}
+			else if (animal_gene.speed == 0) {
+				animal_gene.speed++;
+			}
 			if (animal_gene.vision > max_Gene * 2) {
 				animal_gene.vision--;
 			}
+			
 			if (animal_gene.smell > max_Gene) {
 				animal_gene.smell--;
 			}
@@ -210,7 +222,7 @@ public:
 		}
 
 		energy += 150;
-		metabolism = animal_gene.speed * 1 + animal_gene.smell * 0 + animal_gene.vision * 0 + 5;
+		metabolism = animal_gene.speed * Speed_weight + animal_gene.smell * Smell_weight + animal_gene.vision * Vision_weight + Coeficient_of_existence;
 		
 		pop.push_back(*this);
 		
@@ -226,12 +238,6 @@ public:
 
 	void kill() {
 
-
-		for (int i = 0; i < pop.size(); i++) {
-			if (pop[i].animal_gene.id == animal_gene.id) {
-				pop.erase(pop.begin() + i);
-			}
-		}
 		move_cursor(x, y);
 		cout << white_space;
 		grid[x][y] = 0;
@@ -240,22 +246,90 @@ public:
 		cout << white_space;
 		grid[head_x][head_y] = 0;
 
+		for (int i = 0; i < pop.size(); i++) {
+			if (pop[i].animal_gene.id == animal_gene.id) {
+				pop.erase(pop.begin() + i);
+			}
+		}
+
 	}
 
-	int see_food() const {
+	void force_rot(string ori) {
+		
+		energy += grass_energy;
+		
+		if (ori == "right") {
+			orientation = (orientation + 1) % 4;
+		}
+		else if (ori == "left") {
+			orientation = (orientation + 3) % 4;
+		}
+		else return;
+
+		move_cursor(head_x, head_y);
+		cout << white_space;
+		grid[head_x][head_y] = 0;
+
+
+
+		head_x = x + head_rot[orientation].first;
+		head_y = y + head_rot[orientation].second;
+
+		grid[head_x][head_y] = -1 * animal_gene.id;
+		move_cursor(head_x, head_y);
+		cout << head_img[orientation];
+	}
+
+	int see_food() {
 
 		int vision = animal_gene.vision;
 		
-		for (int i = 0; i < vision; i++) {
-			
-			int check_x = head_x + i * head_rot[orientation].first;
-			int check_y = head_y + i * head_rot[orientation].second;
-			
-			if (check_x < 0 || check_x >= Grid_x || check_y < 0 || check_y >= Grid_y) {
-				return 0;
+		
+		for (int i = 0; i <= vision; i++) {
+
+			int center_x = x + (i * head_rot[orientation].first);
+			int center_y = y + (i * head_rot[orientation].second);
+
+			int rx = center_x + head_rot[(orientation + 1) % 4].first;
+			int ry = center_y + head_rot[(orientation + 1) % 4].second;
+
+			int lx = center_x + head_rot[(orientation + 3) % 4].first;
+			int ly = center_y + head_rot[(orientation + 3) % 4].second;
+
+
+			if (check_lim(center_x, center_y)) {
+
+				if (grid[center_x][center_y] == grass_id) return 1;
 			}
-			else if (grid[check_x][check_y] == grass_id) {
-				return 1;
+			
+			// if is in the right
+			if (check_lim(rx, ry)) {
+
+				if (grid[rx][rx] == grass_id) {
+
+					if (i == 0) {
+						force_rot("right");
+						return 2;
+					}
+					else {
+						return 1;
+					}
+				}
+			}
+
+			// if is in the left
+			if (check_lim(lx, ly)) {
+
+				if (grid[lx][ly] == grass_id) {
+
+					if (i == 0) {
+						force_rot("left");
+						return 2;
+					}
+					else {
+						return 1;
+					}
+				}
 			}
 		}
 
@@ -386,11 +460,14 @@ public:
 		int new_x = head_x + head_rot[orientation].first;
 		int new_y = head_y + head_rot[orientation].second;
 
+		
 		// check limits
 		if (!check_lim(new_x, new_y)) {
 			rot_mov();
 			return;
 		}
+
+		if (grid[new_x][new_y] == grass_id) energy += grass_energy;
 
 		move_cursor(x, y);
 		cout << white_space;
@@ -428,6 +505,8 @@ public:
 	int moviment_control(int num_moviment) {
 
 		// if the num of moviments is greater than the actual moviments
+		bool alredy_moved = false;
+
 		if (num_moviment > animal_gene.speed) return 1;
 
 		energy -= metabolism;
@@ -436,41 +515,36 @@ public:
 		int front_y = head_y + head_rot[orientation].second;
 		
 		// eat grass
-		if (front_x >= 0 && front_x < Grid_x && front_y >= 0 && front_y < Grid_y){
+		if (check_lim(front_x, front_x)){
 
 			// eat grass
 			if(grid[front_x][front_y] == grass_id) {
 					
-				grid[front_x][front_y] = 0;
-				energy += 100;
-
-				if (energy >= 200) {
-
-					Life new_animal(x, y, animal_gene);
-					energy -= 100;
-					
-					return 1;
-				}
+				linear_mov();
+				alredy_moved = true;
 			}
 
 			// avoid animal overlap
 			else if (grid[front_x][front_y] != 0) {
-				rot_mov();
 				
-				return 1;
+				rot_mov();
+				alredy_moved = true;
 			}
 		}
 
 		// priority cases
-		if (see_food()) {
-			linear_mov();
-		}
+		if (!alredy_moved){
+			
+			if (see_food()) {
+				linear_mov();
+			}
 
-		else if (smell_food()) {
-			return 1;
-		}
-		else {
-			random_mov();
+			else if (smell_food()) {
+				return 1;
+			}
+			else {
+				random_mov();
+			}
 		}
 		
 		
@@ -478,8 +552,14 @@ public:
 			kill();
 			return 0;
 		}
+		else if (energy >= 300) {
+			Life(x, y, animal_gene);
+			energy -= 150;
+			return 2;
+		}
+
+		// cout << flush;
 		return 1;
-		cout << flush;
 	}
 };
 
@@ -512,11 +592,11 @@ int main() {
 				if (pop[i].moviment_control(j) == 0) {
 					i--;
 				}
-				update_dashboard();
+				//update_dashboard();
 				move_cursor(Grid_x + 2, 0);
 				
 				// wait for the next step
-				// this_thread::sleep_for(chrono::milliseconds(30));
+				this_thread::sleep_for(chrono::milliseconds(30));
 			}
 		}
 		cin.get();
@@ -536,7 +616,7 @@ void generate_grass() {
 	for (int i = 0; i < Grid_x; i++) {
 		for (int j = 0; j < Grid_y; j++) {
 
-			int value = random_int(1, 20);
+			int value = random_int(1, 30);
 
 			if (value == 1 && grid[i][j] == 0) {
 				grid[i][j] = grass_id;
@@ -563,7 +643,7 @@ void print_grid() {
 				cout << white_space;
 			}
 			// print grass
-			else if (grid[i][j] == 1) cout << 'W';
+			else if (grid[i][j] == grass_id) cout << 'W';
 		}
 		cout << "\n";
 	}
