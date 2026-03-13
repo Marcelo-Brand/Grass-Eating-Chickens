@@ -31,26 +31,29 @@ const int Grid_y = 80;
 
 int grid[Grid_x][Grid_y];
 vector<Life> pop;
-pair<int, int> head_rot[4] = { {1, 0}, {0, 1}, {-1, 0},{0, -1} };
+pair<int, int> head_rot[4] = { {-1, 0}, {0, 1}, {1, 0},{0, -1} };
 
 // image config
-char head_img[4] = {'v', '>', '^', '<'};
-int grass_id = 1;
-char white_space = ' ';
-char body_char = '#';
+const char head_img[4] = {'^', '>', 'v', '<'};
+const int grass_id = 1;
+const char white_space = ' ';
+const char body_char = '#';
+const char baby_body_char = 'o';
 vector <int> ids;
 
 // inernal and external coonfig
-int min_Gene = 1;
-int max_Gene = 5;
-int grass_energy = 100;
+const int min_Gene = 1;
+const int max_Gene = 5;
+const int grass_energy = 100;
 int grass_spaw_prob = 20;
 
 // metabolism calculation
-int Vision_weight = 0;
-int Speed_weight = 0;
-int Smell_weight = 0;
-int	Coeficient_of_existence = 0;
+const int Vision_weight = 0;
+const int Speed_weight = 0;
+const int Smell_weight = 0;
+const int Coeficient_of_existence = 0;
+
+vector<Life> nursery;
 
 
 struct Gene {
@@ -63,9 +66,11 @@ struct Gene {
 
 class Life {
 public:
-  
+	
 	int x = 0, y = 0, head_x = 0, head_y = 0, orientation = 0, energy = 0, metabolism = 0;
-    
+	
+	int target_x = 0, target_y = 0;
+	int target_exist = 0;
 
     Gene animal_gene = {
         1,
@@ -74,12 +79,14 @@ public:
         1
     };
 
-    Life(int start_x, int start_y, Gene parent_gene) {
+    Life(int start_x, int start_y, Gene& parent_gene) {
 
+		bool have_parent;
 
 		//  verify superposition of body
 		int rand = random_int(1, 4);
 		if (parent_gene.speed == NO_PARENT) {
+			
 			
 			for (int i = 0; i < 4; i++) {
 
@@ -89,12 +96,14 @@ public:
 				// verify grid violation
 				if (new_x >= 0 && new_x < Grid_x && new_y >= 0 && new_y < Grid_y) {
 
-					if (grid[new_x][new_y] == 0) {
+					int grid_value = grid[new_x][new_y];
+					
+					if (grid_value == 0) {
 						start_x = new_x;
 						start_y = new_y;
 						break;
 					}
-					else if (grid[new_x][new_y] == grass_id) {
+					else if (grid_value == grass_id) {
 
 						energy += grass_energy;
 						start_x = new_x;
@@ -116,6 +125,8 @@ public:
 
 		// if has no parent
 		if (parent_gene.speed == NO_PARENT) {
+			have_parent = false;
+			
 			animal_gene = {
 				random_int(min_Gene, max_Gene),
 				random_int(min_Gene, max_Gene * 2),
@@ -125,6 +136,8 @@ public:
 		}
 		// if has parent
 		else {
+			have_parent = true;
+			
 			animal_gene = {
 				random_int(-1, 1) + parent_gene.speed,
 				random_int(-1, 1) + parent_gene.vision,
@@ -159,13 +172,14 @@ public:
 					continue;
 				}
 				
-				if (grid[new_x][new_y] == 0) {
+				int grid_value = grid[new_x][new_y];
+				if (grid_value == 0) {
 					
 					start_x = new_x;
 					start_y = new_y;
 					break;
 				}
-				else if (grid[new_x][new_y] == grass_id) {
+				else if (grid_value == grass_id) {
 					
 					start_x = new_x;
 					start_y = new_y;
@@ -174,7 +188,7 @@ public:
 					break;
 				}
 
-				if (i == 4) {
+				if (i == 3) {
 					return;
 				}
 			}
@@ -192,9 +206,12 @@ public:
 			int new_orientation = (i + random_index) % 4;
 			pair<int, int> pos = { start_x + head_rot[new_orientation].first, start_y + head_rot[new_orientation].second };
 
+
 			if ((pos.first >= 0 && pos.first < Grid_x) && (pos.second >= 0 && pos.second < Grid_y)) {
 
-				if (grid[pos.first][pos.second] == 0) {
+				int grid_value = grid[pos.first][pos.second];
+
+				if (grid_value == 0) {
 
 					grid[pos.first][pos.second] = -1 * parent_gene.id;
 					
@@ -205,7 +222,7 @@ public:
 					break;
 				}
 				// if spaw head in grass eat grass
-				else if (grid[pos.first][pos.second] == grass_id) {
+				else if (grid_value == grass_id) {
 					
 					energy += grass_energy;
 					grid[pos.first][pos.second] = -1 * parent_gene.id;
@@ -217,22 +234,30 @@ public:
 					break;
 				}
 			}
-			if (i == 3) grid[x][y] = 0;
-			return;
+			if (i == 3) {
+				grid[x][y] = 0;
+				return;
+			}
 		}
 
 		energy += 150;
 		metabolism = animal_gene.speed * Speed_weight + animal_gene.smell * Smell_weight + animal_gene.vision * Vision_weight + Coeficient_of_existence;
 		
-		pop.push_back(*this);
+		if (have_parent){
+			nursery.push_back(*this);
+			move_cursor(x, y);
+			cout << baby_body_char;
+		}
+		else {
+			pop.push_back(*this);
+			move_cursor(x, y);
+			cout << body_char;
+		}
 		
-		move_cursor(x, y);
-		cout << body_char;
 
 		move_cursor(head_x, head_y);
 		cout << head_img[orientation];
-		
-
+		animal_gene.speed = 10;
 		cout << flush;
 	}
 
@@ -245,24 +270,26 @@ public:
 		move_cursor(head_x, head_y);
 		cout << white_space;
 		grid[head_x][head_y] = 0;
-
-		for (int i = 0; i < pop.size(); i++) {
-			if (pop[i].animal_gene.id == animal_gene.id) {
-				pop.erase(pop.begin() + i);
-			}
-		}
-
 	}
 
-	void force_rot(string ori) {
+	void force_rot(int turn) {
 		
-		energy += grass_energy;
-		
-		if (ori == "right") {
-			orientation = (orientation + 1) % 4;
-		}
-		else if (ori == "left") {
-			orientation = (orientation + 3) % 4;
+		int new_orientation = (orientation + turn) % 4;
+		int new_head_x = x + head_rot[new_orientation].first;
+		int new_head_y = y + head_rot[new_orientation].second;
+
+		if (check_lim(new_head_x, new_head_y)) {
+			int grid_value = grid[new_head_x][new_head_y];
+
+			if (grid_value < 0 || grid_value > grass_id) return;
+			if (grid_value == grass_id) {
+				
+				energy += grass_energy;
+				
+				target_exist = false;
+			}
+	
+			orientation = new_orientation;
 		}
 		else return;
 
@@ -299,7 +326,13 @@ public:
 
 			if (check_lim(center_x, center_y)) {
 
-				if (grid[center_x][center_y] == grass_id) return 1;
+				if (grid[center_x][center_y] == grass_id) {
+					
+					target_x = center_x;
+					target_y = center_y;
+					
+					return 1;
+				}
 			}
 			
 			// if is in the right
@@ -307,13 +340,10 @@ public:
 
 				if (grid[rx][rx] == grass_id) {
 
-					if (i == 0) {
-						force_rot("right");
-						return 2;
-					}
-					else {
-						return 1;
-					}
+					target_x = rx;
+					target_y = ry;
+					
+					return 1;
 				}
 			}
 
@@ -322,13 +352,10 @@ public:
 
 				if (grid[lx][ly] == grass_id) {
 
-					if (i == 0) {
-						force_rot("left");
-						return 2;
-					}
-					else {
-						return 1;
-					}
+					target_x = lx;
+					target_y = ly;
+					
+					return 1;
 				}
 			}
 		}
@@ -336,19 +363,91 @@ public:
 		return 0;
 	}
 
-	int smell_food() const {
+	int smell_food() {
 		
-		
-		/*for (int i = 0; i < animal_gene.smell; i++) {
-			for (int j = 0; j < animal_gene.smell; j++) {
 
-				if 
+		int best_pont = -9999999;
+		auto evaluate = [&](int food_x, int food_y) -> void {
+
+			int dx = food_x - x;
+			int dy = food_y - y;
+
+			int df = dx * head_rot[orientation].first + dy * head_rot[orientation].second;
+			int dr = dx * head_rot[(orientation + 1) % 4].first + dy * head_rot[(orientation + 1) % 4].second;
+		
+			int pont = df - abs(dr);
+
+			if (pont > best_pont) {
+				target_x = food_x;
+				target_y = food_y;
+				best_pont = pont;
 			}
-		}*/
+		};
+
+		int smell = animal_gene.smell;
+
+		for (int r = 1; r < smell; r++) {
+
+			int x_min = head_x - r;
+			int x_max = head_x + r;
+			int y_min = head_y - r;
+			int y_max = head_y + r;
+			bool found_in_layer = false;
+
+			
+			for (int i = x_min; i <= x_max; i++) {
+				
+				// upper row
+				if (check_lim(i, y_max)) {
+					if (grid[i][y_max] == grass_id) {
+						
+						evaluate(i, y_max);
+						found_in_layer = true;
+					}
+				}
+
+				// bottom row
+				if (check_lim(i, y_min)) {
+
+					if (grid[i][y_min] == grass_id) {
+						evaluate(i, y_min);
+						found_in_layer = true;
+					}
+				}
+			}
+			
+			
+			for (int i = y_min + 1; i < y_max; i++) {
+				
+				// right column
+				if (check_lim(x_max, i)) {
+
+					if (grid[x_max][i] == grass_id) {
+						evaluate(x_max, i);
+						found_in_layer = true;
+					}
+				}
+
+				// left column
+				if (check_lim(x_min, i)) {
+
+					if (grid[x_min][i] == grass_id) {
+						evaluate(x_min, i);
+						found_in_layer = true;
+					}
+				}
+			}
+
+			if (found_in_layer) {
+				return 1;
+			}
+		}
+		
 		return 0;
 	}
 
 	void rot_mov() {
+		
 		
 		bool rand = random_int(0, 1);
 
@@ -404,6 +503,7 @@ public:
 				move_cursor(head_x, head_y);
 				cout << head_img[orientation];
 
+				target_exist = false;
 				return;
 			}
 		}
@@ -467,13 +567,22 @@ public:
 			return;
 		}
 
-		if (grid[new_x][new_y] == grass_id) energy += grass_energy;
+		int grid_value = grid[new_x][new_y];
+		if (grid_value == grass_id) {
+
+			energy += grass_energy;
+			target_exist = false;
+		}
+		else if (grid_value != 0) {
+			rot_mov();
+			return;
+		}
 
 		move_cursor(x, y);
 		cout << white_space;
 		
 		move_cursor(head_x, head_y);
-		cout << '#';
+		cout << body_char;
 		
 		move_cursor(new_x, new_y);
 		cout << head_img[orientation];
@@ -481,12 +590,14 @@ public:
 		grid[x][y] = 0;
 		grid[head_x][head_y] = animal_gene.id;
 		grid[new_x][new_y] = -1 * animal_gene.id;
+		
 		// new values after moviment
 		x = head_x;
 		y = head_y;
 
 		head_x = new_x;
 		head_y = new_y;
+		
 	}
 
 	void random_mov() {
@@ -500,69 +611,86 @@ public:
 		}
 	}
 	
+	void strive_to_target() {
 	
+		if (grid[target_x][target_y] != grass_id) return;
+
+		int dist_x = target_x - x;
+		int dist_y = target_y - y;
+
+		int dist_front = dist_x * head_rot[orientation].first + dist_y * head_rot[orientation].second;
+		int dist_left = dist_x * head_rot[(orientation + 3) % 4].first + dist_y * head_rot[(orientation + 3) % 4].second;
+
+		// if chiken is backward to the grass
+		if (dist_front < 0) {
+			
+			if (dist_left < 0) force_rot(1);
+			else force_rot(3);
+		}
+
+		else if (dist_front == 0) {
+			
+			if (dist_left < 0) force_rot(1);
+			else force_rot(3);
+		}
+		// case that the animal is in the right position
+		else {
+
+			if (dist_front >= abs(dist_left)) {
+				linear_mov();
+			}
+			else {
+				
+				if (dist_left > 0) force_rot(3);
+				else force_rot(1);
+			}
+			
+		}
+
+		return;
+	}
 
 	int moviment_control(int num_moviment) {
 
-		// if the num of moviments is greater than the actual moviments
-		bool alredy_moved = false;
-
 		if (num_moviment > animal_gene.speed) return 1;
-
-		energy -= metabolism;
-
-		int front_x = head_x + head_rot[orientation].first;
-		int front_y = head_y + head_rot[orientation].second;
-		
-		// eat grass
-		if (check_lim(front_x, front_x)){
-
-			// eat grass
-			if(grid[front_x][front_y] == grass_id) {
-					
-				linear_mov();
-				alredy_moved = true;
-			}
-
-			// avoid animal overlap
-			else if (grid[front_x][front_y] != 0) {
-				
-				rot_mov();
-				alredy_moved = true;
-			}
-		}
-
-		// priority cases
-		if (!alredy_moved){
-			
-			if (see_food()) {
-				linear_mov();
-			}
-
-			else if (smell_food()) {
-				return 1;
-			}
-			else {
-				random_mov();
-			}
-		}
-		
 		
 		if (energy <= 0) {
 			kill();
 			return 0;
 		}
-		else if (energy >= 300) {
-			Life(x, y, animal_gene);
-			energy -= 150;
-			return 2;
+
+		energy -= metabolism;
+
+		if (!target_exist) {
+			
+			if (see_food()) {
+				target_exist = true;
+			}
+			else if (smell_food()) {
+				target_exist = true;
+			}
+		}
+		
+		if (target_exist) {
+			strive_to_target();
+		}
+		else {
+			random_mov();
 		}
 
-		// cout << flush;
+		if (energy >= 300) {
+			
+			Life animal(x, y, animal_gene);
+			energy = energy - 150;
+			
+			cout << flush;
+			return 2;
+		}
+		
+		cout << flush;
 		return 1;
 	}
 };
-
 
 
 int main() {
@@ -572,33 +700,39 @@ int main() {
 	int num_animals;
 	cout << "How many animals: ";
 	cin >> num_animals;
+	
+	cin.ignore(256, '\n');
 	system("cls");
-		
 	hide_cursor();
 
 	print_grid();
 	generate_grass();
 	generate_animals(num_animals);
 
-	
-	// update_dashboard();
+	//update_dashboard();
 	cin.get();
-
+	
 	while (true) {
 		
 		for (int j = 1; j <= max_Gene; j++) {
 			for (int i = 0; i < pop.size(); i++) {
 				
 				if (pop[i].moviment_control(j) == 0) {
+					pop.erase(pop.begin() + i);
 					i--;
 				}
+
+
 				//update_dashboard();
 				move_cursor(Grid_x + 2, 0);
 				
 				// wait for the next step
-				this_thread::sleep_for(chrono::milliseconds(30));
+				this_thread::sleep_for(chrono::milliseconds());
 			}
 		}
+
+		pop.insert(pop.end(), nursery.begin(), nursery.end());
+		nursery.clear();
 		cin.get();
 	}
 
@@ -613,8 +747,8 @@ int random_int(int init, int end) {
 
 void generate_grass() {
 
-	for (int i = 0; i < Grid_x; i++) {
-		for (int j = 0; j < Grid_y; j++) {
+	for (int i = 1; i < Grid_x - 1; i++) {
+		for (int j = 1; j < Grid_y - 1; j++) {
 
 			int value = random_int(1, 30);
 
