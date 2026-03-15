@@ -3,8 +3,6 @@
 
 ### C++ ###
 # Prerequisites
-*.vcxproj.filters
-*.vcxproj
 *.d
 # Compiled Object files
 *.slo
