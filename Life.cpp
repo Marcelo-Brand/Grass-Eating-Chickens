@@ -29,6 +29,7 @@ void hide_cursor();
 const int Grid_x = 30;
 const int Grid_y = 80;
 
+
 int grid[Grid_x][Grid_y];
 vector<Life> pop;
 pair<int, int> head_rot[4] = { {-1, 0}, {0, 1}, {1, 0},{0, -1} };
@@ -48,9 +49,9 @@ const int grass_energy = 100;
 int grass_spaw_prob = 20;
 
 // metabolism calculation
-const int Vision_weight = 0;
-const int Speed_weight = 0;
-const int Smell_weight = 0;
+const int Vision_weight = 1;
+const int Speed_weight = 2;
+const int Smell_weight = 1;
 const int Coeficient_of_existence = 0;
 
 vector<Life> nursery;
@@ -613,7 +614,10 @@ public:
 	
 	void strive_to_target() {
 	
-		if (grid[target_x][target_y] != grass_id) return;
+		if (grid[target_x][target_y] != grass_id) {
+			target_exist = false;
+			return;
+		}
 
 		int dist_x = target_x - x;
 		int dist_y = target_y - y;
@@ -721,13 +725,11 @@ int main() {
 					pop.erase(pop.begin() + i);
 					i--;
 				}
-
-
 				//update_dashboard();
 				move_cursor(Grid_x + 2, 0);
-				
+				cout << pop.size();
 				// wait for the next step
-				this_thread::sleep_for(chrono::milliseconds());
+				//this_thread::sleep_for(chrono::milliseconds());
 			}
 		}
 
